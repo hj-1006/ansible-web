@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ansible Network Control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div id="auth-overlay" class="overlay">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <span class="logo-mark"></span>
+        <span class="logo-text">Network Control</span>
+      </div>
+      <h1>운영 콘솔 로그인</h1>
+      <p class="auth-desc">API 키로 인증합니다. 외부 연동 서버에서도 동일한 키를 사용하세요.</p>
+      <div class="field">
+        <label for="api-key-input">API Key</label>
+        <input type="password" id="api-key-input" placeholder="aw_xxxxxxxx" autocomplete="off">
+      </div>
+      <button id="auth-save-btn" class="btn btn-primary btn-block">콘솔 접속</button>
+      <p class="hint">최초 서버 실행 시 터미널에 표시된 키를 입력하세요.</p>
+    </div>
+  </div>
+
+  <div class="layout hidden" id="app-layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="logo-mark sm"></span>
+        <div>
+          <span class="brand-name">Ansible Web</span>
+          <span class="brand-sub">Network Ops</span>
+        </div>
+      </div>
+      <nav class="nav">
+        <button class="nav-item active" data-view="dashboard">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          대시보드
+        </button>
+        <button class="nav-item" data-view="devices">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          장비 관리
+        </button>
+        <button class="nav-item" data-view="jobs">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+          작업 이력
+        </button>
+        <button class="nav-item" data-view="api-keys">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+          API 키
+        </button>
+        <button class="nav-item" data-view="api-help">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+          API 문서
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="logout-btn" class="btn btn-ghost btn-sm btn-block">API 키 변경</button>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <p class="topbar-eyebrow">Operations</p>
+          <h2 id="page-title">대시보드</h2>
+        </div>
+        <div class="topbar-actions">
+          <span class="status-badge" id="health-status">
+            <span class="status-dot"></span>
+            확인 중...
+          </span>
+        </div>
+      </header>
+
+      <section id="view-dashboard" class="view active">
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-icon devices"></div>
+            <div>
+              <span class="stat-label">등록 장비</span>
+              <span class="stat-value" id="stat-devices">0</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon jobs"></div>
+            <div>
+              <span class="stat-label">최근 작업</span>
+              <span class="stat-value" id="stat-jobs">0</span>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <h3>빠른 통신 테스트</h3>
+            <p class="panel-desc">등록된 활성 장비에 대해 일괄 연결·Ping 테스트를 실행합니다.</p>
+          </div>
+          <div class="form-inline">
+            <div class="field flex-grow">
+              <label for="bulk-ping-target">Ping 대상</label>
+              <input type="text" id="bulk-ping-target" value="8.8.8.8" placeholder="8.8.8.8">
+            </div>
+            <button class="btn btn-primary" id="bulk-test-btn">전체 테스트 실행</button>
+          </div>
+          <div id="bulk-result" class="log-area hidden"></div>
+        </div>
+      </section>
+
+      <section id="view-devices" class="view">
+        <div class="panel panel-flush">
+          <div class="panel-toolbar">
+            <div>
+              <h3>장비 목록</h3>
+              <p class="panel-desc">Cisco 스위치·라우터·방화벽 등 네트워크 장비를 관리합니다.</p>
+            </div>
+            <button class="btn btn-primary" id="add-device-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+              장비 추가
+            </button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>이름</th>
+                  <th>호스트</th>
+                  <th>유형</th>
+                  <th>플랫폼</th>
+                  <th>상태</th>
+                  <th class="col-actions">작업</th>
+                </tr>
+              </thead>
+              <tbody id="devices-tbody"></tbody>
+            </table>
+            <div id="devices-empty" class="empty-state hidden">
+              <div class="empty-icon"></div>
+              <h4>등록된 장비가 없습니다</h4>
+              <p>첫 네트워크 장비를 추가하고 SNMP 모니터링을 설정하세요.</p>
+              <button class="btn btn-primary" type="button" id="empty-add-device">장비 추가</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-jobs" class="view">
+        <div class="panel panel-flush">
+          <div class="panel-head">
+            <h3>작업 이력</h3>
+            <p class="panel-desc">통신 테스트, 명령 실행, SNMP 수집 기록</p>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>유형</th>
+                  <th>대상</th>
+                  <th>상태</th>
+                  <th>시간</th>
+                  <th class="col-actions"></th>
+                </tr>
+              </thead>
+              <tbody id="jobs-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-api-keys" class="view">
+        <div class="panel panel-flush">
+          <div class="panel-toolbar">
+            <div>
+              <h3>API 키</h3>
+              <p class="panel-desc">외부 시스템·자동화 연동용 인증 키</p>
+            </div>
+            <button class="btn btn-primary" id="create-key-btn">새 API 키</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr><th>이름</th><th>접두사</th><th>상태</th><th>생성일</th><th class="col-actions"></th></tr>
+              </thead>
+              <tbody id="keys-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-monitor" class="view monitor-view">
+        <div class="monitor-toolbar">
+          <button class="btn btn-ghost" id="mon-back-btn">← 장비 목록</button>
+          <div class="monitor-actions">
+            <button class="btn btn-ghost" id="mon-discover-btn">포트 탐색</button>
+            <button class="btn btn-primary" id="mon-poll-btn">지금 수집</button>
+          </div>
+        </div>
+        <div class="monitor-header">
+          <div>
+            <h3 id="mon-device-name">—</h3>
+            <p class="text-muted" id="mon-device-host">—</p>
+          </div>
+          <div class="metric-cards">
+            <div class="metric-card"><span class="label">CPU</span><span class="value" id="mon-cpu">—</span></div>
+            <div class="metric-card"><span class="label">Memory</span><span class="value" id="mon-mem">—</span></div>
+            <div class="metric-card"><span class="label">SNMP</span><span class="metric-pill" id="mon-snmp-status">—</span></div>
+          </div>
+        </div>
+        <div class="monitor-grid">
+          <div class="panel chart-panel">
+            <h4>CPU / Memory</h4>
+            <p class="hint-chart">최근 1시간</p>
+            <div class="chart-wrap"><canvas id="cpu-chart"></canvas></div>
+          </div>
+          <div class="panel chart-panel wide">
+            <h4 id="mon-port-title">포트 트래픽</h4>
+            <p class="hint-chart">포트를 선택하면 실시간 그래프가 표시됩니다</p>
+            <div class="chart-wrap tall"><canvas id="traffic-chart"></canvas></div>
+          </div>
+        </div>
+        <div class="panel panel-flush">
+          <h4 class="section-title">인터페이스</h4>
+          <div class="table-wrap">
+            <table class="data-table ports-table">
+              <thead>
+                <tr>
+                  <th>포트</th><th>상태</th><th>In</th><th>Out</th><th>In 평균</th><th>Out 평균</th>
+                </tr>
+              </thead>
+              <tbody id="mon-ports-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-api-help" class="view">
+        <div class="panel">
+          <div class="panel-head">
+            <h3>REST API</h3>
+            <p class="panel-desc">모든 요청에 <code>X-API-Key</code> 헤더가 필요합니다.</p>
+          </div>
+          <pre class="code-block" id="api-examples"></pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-backdrop" data-close="modal"></div>
+    <div class="modal-dialog">
+      <header class="modal-header">
+        <div>
+          <h3 id="modal-title">장비 추가</h3>
+          <p class="modal-subtitle">접속 정보 및 SNMP 모니터링 설정</p>
+        </div>
+        <button type="button" class="btn-icon" id="modal-cancel-x" aria-label="닫기">×</button>
+      </header>
+      <form id="device-form" class="modal-body">
+        <input type="hidden" id="device-id">
+
+        <section class="form-section">
+          <h4 class="form-section-title">기본 정보</h4>
+          <div class="form-grid">
+            <div class="field">
+              <label for="f-name">장비 이름</label>
+              <input id="f-name" name="name" required placeholder="sw-core-01">
+            </div>
+            <div class="field">
+              <label for="f-host">관리 IP / 호스트</label>
+              <input id="f-host" name="host" required placeholder="192.168.1.10">
+            </div>
+            <div class="field">
+              <label for="f-groups">그룹</label>
+              <input id="f-groups" name="groups" placeholder="core, dc1">
+            </div>
+            <div class="field field-full">
+              <label for="f-desc">설명</label>
+              <textarea id="f-desc" name="description" rows="2" placeholder="위치, 담당자 등"></textarea>
+            </div>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <h4 class="form-section-title">SSH / CLI 접속</h4>
+          <div class="form-grid">
+            <div class="field">
+              <label for="f-port">포트</label>
+              <input id="f-port" name="port" type="number" value="22">
+            </div>
+            <div class="field">
+              <label for="f-user">사용자</label>
+              <input id="f-user" name="username" required placeholder="admin">
+            </div>
+            <div class="field field-full">
+              <label for="f-pass">비밀번호</label>
+              <input id="f-pass" name="password" type="password" placeholder="수정 시에만 입력">
+            </div>
+            <div class="field">
+              <label for="f-type">장비 유형</label>
+              <select id="f-type" name="device_type">
+                <option value="network" selected>네트워크 장비</option>
+                <option value="linux">Linux / SSH</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="f-os">Network OS</label>
+              <select id="f-os" name="network_os">
+                <option value="ios" selected>Cisco IOS</option>
+                <option value="nxos">Cisco NX-OS</option>
+                <option value="generic">Generic</option>
+                <option value="junos">Juniper Junos</option>
+                <option value="eos">Arista EOS</option>
+              </select>
+            </div>
+            <div class="field field-full">
+              <label for="f-platform">Cisco 플랫폼</label>
+              <select id="f-platform" name="cisco_platform">
+                <option value="catalyst_2960">Catalyst 2960</option>
+                <option value="catalyst_3560">Catalyst 3560</option>
+                <option value="cisco_2821">Cisco 2821 (ISR)</option>
+                <option value="asa_5512">ASA 5512</option>
+                <option value="generic_ios">기타 IOS</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section class="form-section form-section-accent">
+          <h4 class="form-section-title">SNMP 모니터링</h4>
+          <div class="switch-list">
+            <label class="switch-row">
+              <span class="switch-text">
+                <strong>SNMP 사용</strong>
+                <small>sysName, 연결 상태 등 기본 정보 수집</small>
+              </span>
+              <input type="checkbox" class="switch-input" name="snmp_enabled">
+              <span class="switch-ui" aria-hidden="true"></span>
+            </label>
+            <label class="switch-row">
+              <span class="switch-text">
+                <strong>실시간 트래픽 수집</strong>
+                <small>포트별 bps·CPU·메모리 백그라운드 수집</small>
+              </span>
+              <input type="checkbox" class="switch-input" name="snmp_monitor_enabled">
+              <span class="switch-ui" aria-hidden="true"></span>
+            </label>
+            <label class="switch-row">
+              <span class="switch-text">
+                <strong>장비 활성화</strong>
+                <small>비활성 시 Ansible 인벤토리에서 제외</small>
+              </span>
+              <input type="checkbox" class="switch-input" name="enabled" checked>
+              <span class="switch-ui" aria-hidden="true"></span>
+            </label>
+          </div>
+          <div class="form-grid snmp-fields">
+            <div class="field">
+              <label for="f-community">Community</label>
+              <input id="f-community" name="snmp_community" value="public">
+            </div>
+            <div class="field">
+              <label for="f-snmp-port">SNMP 포트</label>
+              <input id="f-snmp-port" name="snmp_port" type="number" value="161">
+            </div>
+            <div class="field">
+              <label for="f-poll">수집 주기 (초)</label>
+              <input id="f-poll" name="snmp_poll_interval" type="number" value="30" min="10" max="300">
+            </div>
+          </div>
+        </section>
+      </form>
+      <footer class="modal-footer">
+        <button type="button" class="btn btn-ghost" id="modal-cancel">취소</button>
+        <button type="submit" form="device-form" class="btn btn-primary">저장</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="job-modal" class="modal hidden">
+    <div class="modal-backdrop" data-close="job-modal"></div>
+    <div class="modal-dialog modal-lg">
+      <header class="modal-header">
+        <h3>작업 결과</h3>
+        <button type="button" class="btn-icon" id="job-modal-close" aria-label="닫기">×</button>
+      </header>
+      <pre id="job-detail" class="log-area modal-log"></pre>
+    </div>
+  </div>
+
+  <div id="command-modal" class="modal hidden">
+    <div class="modal-backdrop" data-close="command-modal"></div>
+    <div class="modal-dialog modal-sm">
+      <header class="modal-header">
+        <h3>명령 실행</h3>
+        <button type="button" class="btn-icon" id="cmd-cancel-x" aria-label="닫기">×</button>
+      </header>
+      <div class="modal-body">
+        <input type="hidden" id="cmd-device-id">
+        <div class="field">
+          <label for="cmd-input">CLI 명령</label>
+          <input id="cmd-input" placeholder="show ip interface brief">
+        </div>
+      </div>
+      <footer class="modal-footer">
+        <button type="button" class="btn btn-ghost" id="cmd-cancel">취소</button>
+        <button type="button" class="btn btn-primary" id="cmd-run">실행</button>
+      </footer>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/monitor.js"></script>
+</body>
+</html>

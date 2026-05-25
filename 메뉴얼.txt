@@ -1,0 +1,35 @@
+=== ansible-web 설치 (Linux 서버 — Ubuntu/Debian) ===
+
+[원인]
+- Python 3.11 이 설치되어 있는데 apt 저장소는 Ubuntu 20.04(focal)라서
+  python3-pip / python3-venv 설치가 의존성 충돌로 실패합니다.
+- pip install 은 가상환경(venv) 안에서 해야 합니다.
+
+[한 번만 실행] — root 터미널에서
+cd /home/hj1006/ansible-web
+rm -rf venv
+bash setup-venv.sh
+
+# setup 중 "curl (23)" 나왔던 경우 → get-pip.py 를 프로젝트 폴더에 받도록 수정됨
+# venv 만 있고 pip 없으면:
+bash fix-pip.sh
+
+# pip 대신 venv 안 pip 사용:
+./venv/bin/pip install -r requirements.txt
+./venv/bin/python run.py
+
+[서버 실행]
+source venv/bin/activate
+python run.py
+# 또는: ./venv/bin/python run.py
+
+[SNMP 도구 (장비 모니터링)]
+sudo apt install snmp snmp-mibs-downloader
+# apt 가 깨져 있으면: snmpwalk -v2c -c public 장비IP system
+
+[Cisco 장비]
+snmp-server community YOUR_COMMUNITY RO
+
+[MySQL]
+cp .env.example .env
+# ANSIBLE_WEB_DB_HOST, DB_USER, DB_PASSWORD 입력

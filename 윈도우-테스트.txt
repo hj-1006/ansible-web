@@ -1,0 +1,69 @@
+========================================
+ Windows PC에서 UI만 테스트하기
+========================================
+
+[오류 원인]
+  Failed to fetch / ERR_CONNECTION_REFUSED
+  → 백엔드(FastAPI)가 안 떠 있거나, 잘못된 주소로 접속한 경우입니다.
+
+  · http://localhost:8080  → 서버가 Windows에 있을 때만 됨
+  · http://192.168.47.128:8080 → 서버가 Linux(그 IP)에 있을 때
+
+========================================
+ 방법 1) Linux 서버 + Windows 브라우저 (권장)
+========================================
+
+1) Linux 서버(ansible-web 있는 PC)에서:
+
+   cd /home/hj1006/ansible-web
+   bash setup-venv.sh          # 최초 1회
+   bash start-server.sh
+
+   콘솔에 API 키가 출력됩니다. 복사해 두세요.
+
+2) Windows Chrome 주소창:
+
+   http://192.168.47.128:8080
+
+   (Linux IP가 다르면 hostname -I 로 확인한 IP 사용)
+
+3) API 키 입력 후 로그인 → 장비 추가·UI 테스트
+
+4) 방화벽 (Linux에서 포트 안 열리면):
+
+   sudo ufw allow 8080/tcp
+   # 또는
+   sudo iptables -I INPUT -p tcp --dport 8080 -j ACCEPT
+
+※ 장비가 없어도 장비 등록·목록·모달은 DB에 저장되며 UI 테스트 가능합니다.
+  통신 테스트/SNMP는 실제 장비 IP가 없으면 실패하는 것이 정상입니다.
+
+========================================
+ 방법 2) Windows에서 서버까지 실행
+========================================
+
+1) Python 3.11 설치 (python.org)
+
+2) PowerShell:
+
+   cd C:\경로\ansible-web
+   python -m venv venv
+   .\venv\Scripts\activate
+   pip install -r requirements.txt
+   python run.py
+
+3) 브라우저: http://localhost:8080
+
+========================================
+ 체크리스트
+========================================
+
+[ ] Linux에서 run.py 실행 중인가? (프로세스 확인)
+[ ] Windows 주소가 Linux IP:8080 인가? (localhost X)
+[ ] 같은 Wi-Fi/망인가?
+[ ] API 키를 입력했는가?
+
+서버 살아있는지 (Windows에서):
+  curl http://192.168.47.128:8080/api/v1/health
+
+  {"status":"ok",...} 가 나오면 연결 OK

@@ -1,0 +1,29 @@
+---
+- name: Linux 장비 통신 테스트
+  hosts: all
+  gather_facts: false
+  vars:
+    ping_target: "8.8.8.8"
+  tasks:
+    - name: SSH 연결 확인
+      ansible.builtin.wait_for_connection:
+        timeout: 30
+
+    - name: Ping 테스트
+      ansible.builtin.shell: "ping -c 3 -W 2 {{ ping_target }}"
+      register: ping_result
+      changed_when: false
+      failed_when: false
+
+    - name: 연결 정보 수집
+      ansible.builtin.setup:
+        gather_subset: min
+      register: facts_result
+
+    - name: 결과 출력
+      ansible.builtin.debug:
+        msg:
+          reachable: true
+          ping_target: "{{ ping_target }}"
+          ping_output: "{{ ping_result.stdout | default('') }}"
+          hostname: "{{ ansible_facts.get('hostname', inventory_hostname) }}"

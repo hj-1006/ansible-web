@@ -1,0 +1,32 @@
+---
+- name: 네트워크 장비 통신 테스트
+  hosts: all
+  gather_facts: false
+  vars:
+    ping_target: "8.8.8.8"
+  tasks:
+    - name: 네트워크 CLI 연결 확인
+      ansible.netcommon.cli_command:
+        command: show version
+      register: version_out
+      ignore_errors: true
+
+    - name: 대체 - raw show version
+      ansible.builtin.raw: show version
+      register: raw_version
+      when: version_out is failed
+      ignore_errors: true
+
+    - name: Ping 테스트 (장비에서)
+      ansible.netcommon.cli_command:
+        command: "ping {{ ping_target }} count 3"
+      register: ping_out
+      ignore_errors: true
+
+    - name: 결과 출력
+      ansible.builtin.debug:
+        msg:
+          reachable: "{{ version_out is succeeded or raw_version is succeeded }}"
+          ping_target: "{{ ping_target }}"
+          version: "{{ version_out.stdout | default(raw_version.stdout | default('N/A')) }}"
+          ping: "{{ ping_out.stdout | default('ping skipped or unsupported') }}"

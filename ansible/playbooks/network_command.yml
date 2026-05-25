@@ -1,0 +1,15 @@
+---
+- name: 네트워크 장비 CLI 명령
+  hosts: all
+  gather_facts: false
+  vars:
+    cli_command: "show ip interface brief"
+  tasks:
+    - name: CLI 명령 실행
+      ansible.netcommon.cli_command:
+        command: "{{ cli_command }}"
+      register: cli_out
+
+    - name: 결과 출력
+      ansible.builtin.debug:
+        var: cli_out.stdout

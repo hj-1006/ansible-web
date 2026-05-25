@@ -1,0 +1,16 @@
+---
+- name: Linux 장비 명령 실행
+  hosts: all
+  gather_facts: false
+  vars:
+    run_command: "hostname"
+    use_become: false
+  tasks:
+    - name: 명령 실행
+      ansible.builtin.shell: "{{ run_command }}"
+      register: cmd_out
+      become: "{{ use_become | bool }}"
+
+    - name: 결과
+      ansible.builtin.debug:
+        var: cmd_out
