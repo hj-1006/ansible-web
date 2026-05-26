@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re  # 텍스트 형태의 SNMP 응답(e.g. up(1))에서 숫자만 정밀하게 추출하기 위해 추가
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -69,12 +70,22 @@ def _rows_to_map(rows) -> dict[int, str]:
 
 
 def _rows_to_int_map(rows) -> dict[int, int]:
+    """텍스트가 혼합된 SNMP 반환값(예: up(1), ethernetCsmacd(6))에서 순수 정수만 파싱"""
     out: dict[int, int] = {}
     for r in rows:
-        try:
-            out[r.index] = int(r.value)
-        except ValueError:
-            pass
+        cleaned = r.value.strip()
+        # 1. 괄호 안에 숫자가 매칭되는 형태 처리 (예: up(1) -> 1)
+        match = re.search(r"\((\d+)\)", cleaned)
+        if match:
+            out[r.index] = int(match.group(1))
+        else:
+            try:
+                out[r.index] = int(cleaned)
+            except ValueError:
+                # 2. 괄호는 없으나 문자열 내부에 숫자가 포함되어 있는 경우 숫자만 필터링 시도
+                digits = re.search(r"\d+", cleaned)
+                if digits:
+                    out[r.index] = int(digits.group())
     return out
 
 
@@ -151,7 +162,6 @@ def _fetch_cpu_memory(client: SnmpClient, platform: str) -> tuple[float | None, 
         used_map = _rows_to_int_map(used_rows)
         free_map = _rows_to_int_map(free_rows)
         if used_map and free_map:
-            # 동일 pool index 매칭 — 가장 큰 used 풀 선택
             best_idx = max(used_map.keys(), key=lambda k: used_map.get(k, 0))
             mem_used = used_map.get(best_idx)
             mem_free = free_map.get(best_idx, 0)
@@ -234,7 +244,6 @@ def collect_device_metrics(db: Session, device: Device) -> None:
         if s.if_index not in prev_samples:
             prev_samples[s.if_index] = s
 
-    # rolling avg: last 5 samples per port
     history: dict[int, list[PortTrafficSample]] = defaultdict(list)
     for s in (
         db.query(PortTrafficSample)
