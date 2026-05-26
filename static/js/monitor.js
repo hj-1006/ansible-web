@@ -7,6 +7,7 @@ let cpuChart = null;
 let selectedIfIndex = null;
 
 function formatBps(bps) {
+  if (bps == null || bps === 0) return '0 bps';
   if (bps >= 1e9) return `${(bps / 1e9).toFixed(2)} Gbps`;
   if (bps >= 1e6) return `${(bps / 1e6).toFixed(2)} Mbps`;
   if (bps >= 1e3) return `${(bps / 1e3).toFixed(1)} Kbps`;
@@ -14,6 +15,7 @@ function formatBps(bps) {
 }
 
 function portStatusBadge(port) {
+  // 포트 상태에 따른 직관적인 클래스 배정
   const cls = port.status === 'up' ? 'success' : port.status === 'shutdown' ? 'failed' : 'running';
   const label = port.status === 'shutdown' ? 'Shutdown' : port.status === 'up' ? 'Up' : 'Down';
   return `<span class="badge ${cls}">${label}</span>`;
@@ -77,12 +79,20 @@ function renderMonitorOverview(data) {
     tbody.innerHTML = '<tr><td colspan="6">포트 없음 — SNMP 탐색을 실행하세요.</td></tr>';
     return;
   }
+  
+  // 대역폭(speed_bps) 및 세부 활성화 상태 유무 데이터를 컬럼 내부에 완벽히 녹여냄
   tbody.innerHTML = data.ports
     .map(
       (p) => `
     <tr class="port-row ${selectedIfIndex === p.if_index ? 'selected' : ''}" data-if="${p.if_index}" data-name="${esc(p.name)}">
-      <td><strong>${esc(p.name)}</strong></td>
-      <td>${portStatusBadge(p)}</td>
+      <td>
+        <strong>${esc(p.name)}</strong>
+        ${p.alias ? `<br><small style="color: #748094; font-size: 11px; display: block; margin-top: 2px;">${esc(p.alias)}</small>` : ''}
+      </td>
+      <td>
+        ${portStatusBadge(p)}
+        <small style="color: #94a3b8; font-size: 11px; display: block; margin-top: 2px; font-weight: 500;">${formatBps(p.speed_bps)}</small>
+      </td>
       <td class="num">${formatBps(p.last_in_bps)}</td>
       <td class="num">${formatBps(p.last_out_bps)}</td>
       <td class="num muted">${formatBps(p.last_in_avg_bps)}</td>
