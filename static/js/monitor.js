@@ -6,10 +6,9 @@ let trafficChart = null;
 let cpuChart = null;
 let selectedIfIndex = null;
 
-// 실시간 정렬 및 검색을 위한 상태 엔진 관리 변수
 let currentPortsData = [];
-let currentSortColumn = 'name'; // 기본 정렬값: 포트 이름
-let currentSortOrder = 'asc';   // 기본 오름차순
+let currentSortColumn = 'name'; 
+let currentSortOrder = 'asc';   
 
 function formatBps(bps) {
   if (bps == null || bps === 0) return '0 bps';
@@ -82,36 +81,58 @@ function renderMonitorOverview(data) {
   $('#mon-snmp-status').textContent = d.snmp_last_status || '—';
   $('#mon-snmp-status').className = `metric-pill ${d.snmp_last_status === 'success' ? 'ok' : ''}`;
 
-  // 실시간 변경 처리를 위한 글로벌 데이터 바인딩 및 렌더링 함수 전환
   currentPortsData = data.ports || [];
   displayPortsTable();
 
   renderCpuChart(data.recent_metrics);
 }
 
-/** 정렬 및 검색 조건에 맞추어 포트 테이블을 재생성하는 코어 렌더링 함수 */
+/** Cisco 전용 네트워크 장비 축약어 치환 및 검색 알고리즘 함수 */
+function matchCiscoPortName(portName, searchVal) {
+  const name = portName.toLowerCase().replace(/\s+/g, '');
+  const query = searchVal.toLowerCase().replace(/\s+/g, '');
+  
+  if (name.includes(query)) return true;
+  
+  // f0/1, gi1/0/2 등 다양한 스위칭 시스코 인터페이스 명칭 치환 매핑
+  let expanded = query;
+  if (/^f\d/.test(query)) expanded = query.replace(/^f/, 'fastethernet');
+  else if (/^fa\d/.test(query)) expanded = query.replace(/^fa/, 'fastethernet');
+  else if (/^g\d/.test(query)) expanded = query.replace(/^g/, 'gigabitethernet');
+  else if (/^gi\d/.test(query)) expanded = query.replace(/^gi/, 'gigabitethernet');
+  else if (/^te\d/.test(query)) expanded = query.replace(/^te/, 'tengigabitethernet');
+  else if (/^po\d/.test(query)) expanded = query.replace(/^po/, 'port-channel');
+  else if (/^e\d/.test(query)) expanded = query.replace(/^e/, 'ethernet');
+
+  return name.includes(expanded);
+}
+
 function displayPortsTable() {
   const tbody = $('#mon-ports-tbody');
   if (!tbody) return;
 
-  const searchVal = $('#port-search-input')?.value.toLowerCase() || '';
+  const searchVal = $('#port-search-input')?.value.trim() || '';
 
-  // 1. 키워드 필터링 (포트명 또는 Alias 검색)
+  // 1. 패치된 네트워크 지능형 검색 결합
   let filtered = currentPortsData.filter((p) => {
-    return p.name.toLowerCase().includes(searchVal) || 
-           (p.alias && p.alias.toLowerCase().includes(searchVal));
+    if (!searchVal) return true;
+    const matchesName = matchCiscoPortName(p.name, searchVal);
+    const matchesAlias = p.alias && p.alias.toLowerCase().includes(searchVal.toLowerCase());
+    return matchesName || matchesAlias;
   });
 
-  // 2. 고성능 시계열 다중 타입 정렬 분기 알고리즘
+  // 2. 오차 없는 직관적 카테고리별 다중 교차 정렬 메커니즘
   filtered.sort((a, b) => {
+    if (currentSortColumn === 'name') {
+      const valA = a.name || '';
+      const valB = b.name || '';
+      return currentSortOrder === 'asc' 
+        ? valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' }) 
+        : valB.localeCompare(valA, undefined, { numeric: true, sensitivity: 'base' });
+    }
+
     let valA, valB;
     switch (currentSortColumn) {
-      case 'name':
-        valA = a.name; valB = b.name;
-        // 자연스러운 인터페이스 넘버링 순 정렬 처리 (numeric: true)
-        return currentSortOrder === 'asc' 
-          ? valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' }) 
-          : valB.localeCompare(valA, undefined, { numeric: true, sensitivity: 'base' });
       case 'status':
         valA = a.status || ''; valB = b.status || '';
         break;
@@ -128,7 +149,7 @@ function displayPortsTable() {
         valA = a.last_out_avg_bps || 0; valB = b.last_out_avg_bps || 0;
         break;
       default:
-        valA = a.name; valB = b.name;
+        valA = 0; valB = 0;
     }
 
     if (typeof valA === 'string') {
@@ -143,22 +164,23 @@ function displayPortsTable() {
     return;
   }
 
+  // 3. UI 칸 픽스 맞춤 출력 (스타일 수직 정렬 강제 매칭)
   tbody.innerHTML = filtered
     .map(
       (p) => `
     <tr class="port-row ${selectedIfIndex === p.if_index ? 'selected' : ''}" data-if="${p.if_index}" data-name="${esc(p.name)}">
-      <td>
+      <td style="text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
         <strong>${esc(p.name)}</strong>
         ${p.alias ? `<br><small style="color: #748094; font-size: 11px; display: block; margin-top: 2px;">${esc(p.alias)}</small>` : ''}
       </td>
-      <td>
+      <td style="text-align: left;">
         ${portStatusBadge(p)}
         <small style="color: #94a3b8; font-size: 11px; display: block; margin-top: 2px; font-weight: 500;">${formatBps(p.speed_bps)}</small>
       </td>
-      <td class="num">${formatBps(p.last_in_bps)}</td>
-      <td class="num">${formatBps(p.last_out_bps)}</td>
-      <td class="num muted">${formatBps(p.last_in_avg_bps)}</td>
-      <td class="num muted">${formatBps(p.last_out_avg_bps)}</td>
+      <td class="num" style="text-align: right; font-variant-numeric: tabular-nums;">${formatBps(p.last_in_bps)}</td>
+      <td class="num" style="text-align: right; font-variant-numeric: tabular-nums;">${formatBps(p.last_out_bps)}</td>
+      <td class="num muted" style="text-align: right; font-variant-numeric: tabular-nums;">${formatBps(p.last_in_avg_bps)}</td>
+      <td class="num muted" style="text-align: right; font-variant-numeric: tabular-nums;">${formatBps(p.last_out_avg_bps)}</td>
     </tr>`
     )
     .join('');
@@ -176,7 +198,6 @@ function displayPortsTable() {
   updateSortIcons();
 }
 
-/** 활성화된 소팅 헤더 상태 아이콘 동적 갱신 */
 function updateSortIcons() {
   document.querySelectorAll('.ports-table th.sortable').forEach((th) => {
     const col = th.dataset.sort;
@@ -184,7 +205,7 @@ function updateSortIcons() {
     if (iconEl) {
       if (currentSortColumn === col) {
         iconEl.textContent = currentSortOrder === 'asc' ? '▲' : '▼';
-        th.style.color = '#3b82f6'; // 정렬 중인 항목 파란색으로 명시
+        th.style.color = '#3b82f6'; 
       } else {
         iconEl.textContent = '↕';
         th.style.color = '';
@@ -336,12 +357,10 @@ function initMonitor() {
   $('#mon-discover-btn')?.addEventListener('click', monitorDiscover);
   $('#mon-poll-btn')?.addEventListener('click', monitorPollNow);
 
-  // 실시간 문자열 검색 이벤트 바인딩
   $('#port-search-input')?.addEventListener('input', () => {
     displayPortsTable();
   });
 
-  // 각 테이블 컬럼 제목 클릭 시 소팅 정렬 반전 이벤트 위임 바인딩
   document.querySelectorAll('.ports-table th.sortable').forEach((th) => {
     th.addEventListener('click', () => {
       const col = th.dataset.sort;
