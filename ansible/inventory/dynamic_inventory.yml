@@ -2,14 +2,24 @@ all:
   children:
     network_hosts:
       hosts:
-        a: null
+        L2SW: null
+        방화벽 ASA: null
   hosts:
-    a:
+    L2SW:
       ansible_connection: ansible.netcommon.network_cli
-      ansible_host: 172.16.99.196
+      ansible_host: 192.168.200.254
+      ansible_network_os: cisco.ios.ios
+      ansible_password: cisco
+      ansible_port: 22
+      ansible_ssh_common_args: -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+      ansible_ssh_pass: cisco
+      ansible_user: admin
+    방화벽 ASA:
+      ansible_connection: ansible.netcommon.network_cli
+      ansible_host: 192.168.200.1
       ansible_network_os: cisco.ios.ios
       ansible_password: coscp
-      ansible_port: 5022
+      ansible_port: 22
       ansible_ssh_common_args: -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
       ansible_ssh_pass: coscp
       ansible_user: admin

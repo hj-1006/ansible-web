@@ -33,6 +33,7 @@ def start_scheduler():
         seconds=settings.snmp_poll_interval_default,
         id="snmp_monitor",
         replace_existing=True,
+        max_instances=3,  # 장비 타임아웃 지연 발생 시 다음 스케줄이 누락 및 누적 중단되는 현상 방지
     )
     _scheduler.start()
     logger.info("SNMP 모니터 스케줄러 시작 (간격 %ds)", settings.snmp_poll_interval_default)

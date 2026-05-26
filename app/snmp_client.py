@@ -11,13 +11,14 @@ from dataclasses import dataclass
 from app.config import settings
 from app.models import Device
 
-OID_IF_DESCR = "1.3.6.1.2.1.1.2.1.2.1.2"
-OID_IF_TYPE = "1.3.6.1.2.1.2.1.3.1.2"
-OID_IF_SPEED = "1.3.6.1.2.1.2.1.5.1.2"
-OID_IF_ADMIN = "1.3.6.1.2.1.2.1.7.1.2"
-OID_IF_OPER = "1.3.6.1.2.1.2.1.8.1.2"
-OID_IF_IN = "1.3.6.1.2.1.2.1.10.1.2"
-OID_IF_OUT = "1.3.6.1.2.1.2.1.16.1.2"
+# 표준 IF-MIB 인터페이스 OID 대역으로 전면 교정
+OID_IF_DESCR = "1.3.6.1.2.1.2.2.1.2"
+OID_IF_TYPE = "1.3.6.1.2.1.2.2.1.3"
+OID_IF_SPEED = "1.3.6.1.2.1.2.2.1.5"
+OID_IF_ADMIN = "1.3.6.1.2.1.2.2.1.7"
+OID_IF_OPER = "1.3.6.1.2.1.2.2.1.8"
+OID_IF_IN = "1.3.6.1.2.1.2.2.1.10"
+OID_IF_OUT = "1.3.6.1.2.1.2.2.1.16"
 OID_IF_HC_IN = "1.3.6.1.2.1.31.1.1.1.6"
 OID_IF_HC_OUT = "1.3.6.1.2.1.31.1.1.1.10"
 OID_IF_ALIAS = "1.3.6.1.2.1.31.1.1.1.18"
