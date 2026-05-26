@@ -138,7 +138,7 @@ class SnmpClient:
         return asyncio.run(self._get_pysnmp_async(oids))
 
     async def _walk_pysnmp_async(self, oid: str) -> list[SnmpWalkRow]:
-        from pysnmp.hlapi.asyncio import (
+        from pysnmp.hlapi.v3arch.asyncio import (
             CommunityData,
             ContextData,
             ObjectIdentity,
@@ -175,7 +175,7 @@ class SnmpClient:
         return rows
 
     async def _get_pysnmp_async(self, oids: list[str]) -> dict[str, str]:
-        from pysnmp.hlapi.asyncio import (
+        from pysnmp.hlapi.v3arch.asyncio import (
             CommunityData,
             ContextData,
             ObjectIdentity,

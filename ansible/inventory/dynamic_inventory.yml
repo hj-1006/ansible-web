@@ -6,10 +6,10 @@ all:
   hosts:
     a:
       ansible_connection: ansible.netcommon.network_cli
-      ansible_host: 192.168.47.1
+      ansible_host: 172.16.99.196
       ansible_network_os: cisco.ios.ios
-      ansible_password: cisco123#
-      ansible_port: 22
+      ansible_password: coscp
+      ansible_port: 5022
       ansible_ssh_common_args: -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
-      ansible_ssh_pass: cisco123#
-      ansible_user: root
+      ansible_ssh_pass: coscp
+      ansible_user: admin
