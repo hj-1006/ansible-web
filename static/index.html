@@ -222,13 +222,22 @@
             <div class="chart-wrap tall"><canvas id="traffic-chart"></canvas></div>
           </div>
         </div>
+        
         <div class="panel panel-flush">
-          <h4 class="section-title">인터페이스</h4>
+          <div class="panel-toolbar" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px 8px 20px;">
+            <h4 class="section-title" style="margin: 0; padding: 0; border: none;">인터페이스</h4>
+            <input type="text" id="port-search-input" placeholder="포트 이름 또는 설명 검색..." style="padding: 6px 12px; border: 1px solid #374151; background: #1f2937; color: #fff; border-radius: 6px; font-size: 13px; width: 240px; outline: none;">
+          </div>
           <div class="table-wrap">
             <table class="data-table ports-table">
               <thead>
                 <tr>
-                  <th>포트</th><th>상태</th><th>In</th><th>Out</th><th>In 평균</th><th>Out 평균</th>
+                  <th class="sortable" data-sort="name" style="cursor: pointer; user-select: none;">포트 <span class="sort-icon" style="font-size: 10px; margin-left: 4px;">↕</span></th>
+                  <th class="sortable" data-sort="status" style="cursor: pointer; user-select: none;">상태 <span class="sort-icon" style="font-size: 10px; margin-left: 4px;">↕</span></th>
+                  <th class="sortable" data-sort="in" style="cursor: pointer; user-select: none; text-align: right;">In <span class="sort-icon" style="font-size: 10px; margin-left: 4px;">↕</span></th>
+                  <th class="sortable" data-sort="out" style="cursor: pointer; user-select: none; text-align: right;">Out <span class="sort-icon" style="font-size: 10px; margin-left: 4px;">↕</span></th>
+                  <th class="sortable" data-sort="in_avg" style="cursor: pointer; user-select: none; text-align: right;">In 평균 <span class="sort-icon" style="font-size: 10px; margin-left: 4px;">↕</span></th>
+                  <th class="sortable" data-sort="out_avg" style="cursor: pointer; user-select: none; text-align: right;">Out 평균 <span class="sort-icon" style="font-size: 10px; margin-left: 4px;">↕</span></th>
                 </tr>
               </thead>
               <tbody id="mon-ports-tbody"></tbody>

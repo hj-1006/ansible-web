@@ -1,10 +1,15 @@
-/** 장비 SNMP 모니터 — 실시간 트래픽 그래프 */
+/** 장비 SNMP 모니터 — 실시간 트래픽 그래프 및 동적 정렬/검색 기능 */
 
 let monitorDeviceId = null;
 let monitorPollTimer = null;
 let trafficChart = null;
 let cpuChart = null;
 let selectedIfIndex = null;
+
+// 실시간 정렬 및 검색을 위한 상태 엔진 관리 변수
+let currentPortsData = [];
+let currentSortColumn = 'name'; // 기본 정렬값: 포트 이름
+let currentSortOrder = 'asc';   // 기본 오름차순
 
 function formatBps(bps) {
   if (bps == null || bps === 0) return '0 bps';
@@ -15,7 +20,6 @@ function formatBps(bps) {
 }
 
 function portStatusBadge(port) {
-  // 포트 상태에 따른 직관적인 클래스 배정
   const cls = port.status === 'up' ? 'success' : port.status === 'shutdown' ? 'failed' : 'running';
   const label = port.status === 'shutdown' ? 'Shutdown' : port.status === 'up' ? 'Up' : 'Down';
   return `<span class="badge ${cls}">${label}</span>`;
@@ -24,6 +28,10 @@ function portStatusBadge(port) {
 async function openDeviceMonitor(deviceId, deviceName) {
   monitorDeviceId = deviceId;
   selectedIfIndex = null;
+  currentSortColumn = 'name';
+  currentSortOrder = 'asc';
+  if ($('#port-search-input')) $('#port-search-input').value = '';
+
   $('#page-title').textContent = `모니터링 · ${deviceName}`;
   $$('.view').forEach((el) => el.classList.remove('active'));
   $('#view-monitor').classList.add('active');
@@ -74,14 +82,68 @@ function renderMonitorOverview(data) {
   $('#mon-snmp-status').textContent = d.snmp_last_status || '—';
   $('#mon-snmp-status').className = `metric-pill ${d.snmp_last_status === 'success' ? 'ok' : ''}`;
 
+  // 실시간 변경 처리를 위한 글로벌 데이터 바인딩 및 렌더링 함수 전환
+  currentPortsData = data.ports || [];
+  displayPortsTable();
+
+  renderCpuChart(data.recent_metrics);
+}
+
+/** 정렬 및 검색 조건에 맞추어 포트 테이블을 재생성하는 코어 렌더링 함수 */
+function displayPortsTable() {
   const tbody = $('#mon-ports-tbody');
-  if (!data.ports.length) {
-    tbody.innerHTML = '<tr><td colspan="6">포트 없음 — SNMP 탐색을 실행하세요.</td></tr>';
+  if (!tbody) return;
+
+  const searchVal = $('#port-search-input')?.value.toLowerCase() || '';
+
+  // 1. 키워드 필터링 (포트명 또는 Alias 검색)
+  let filtered = currentPortsData.filter((p) => {
+    return p.name.toLowerCase().includes(searchVal) || 
+           (p.alias && p.alias.toLowerCase().includes(searchVal));
+  });
+
+  // 2. 고성능 시계열 다중 타입 정렬 분기 알고리즘
+  filtered.sort((a, b) => {
+    let valA, valB;
+    switch (currentSortColumn) {
+      case 'name':
+        valA = a.name; valB = b.name;
+        // 자연스러운 인터페이스 넘버링 순 정렬 처리 (numeric: true)
+        return currentSortOrder === 'asc' 
+          ? valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' }) 
+          : valB.localeCompare(valA, undefined, { numeric: true, sensitivity: 'base' });
+      case 'status':
+        valA = a.status || ''; valB = b.status || '';
+        break;
+      case 'in':
+        valA = a.last_in_bps || 0; valB = b.last_in_bps || 0;
+        break;
+      case 'out':
+        valA = a.last_out_bps || 0; valB = b.last_out_bps || 0;
+        break;
+      case 'in_avg':
+        valA = a.last_in_avg_bps || 0; valB = b.last_in_avg_bps || 0;
+        break;
+      case 'out_avg':
+        valA = a.last_out_avg_bps || 0; valB = b.last_out_avg_bps || 0;
+        break;
+      default:
+        valA = a.name; valB = b.name;
+    }
+
+    if (typeof valA === 'string') {
+      return currentSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    } else {
+      return currentSortOrder === 'asc' ? valA - valB : valB - valA;
+    }
+  });
+
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 24px;">검색 결과와 일치하는 포트 정보가 없습니다.</td></tr>';
     return;
   }
-  
-  // 대역폭(speed_bps) 및 세부 활성화 상태 유무 데이터를 컬럼 내부에 완벽히 녹여냄
-  tbody.innerHTML = data.ports
+
+  tbody.innerHTML = filtered
     .map(
       (p) => `
     <tr class="port-row ${selectedIfIndex === p.if_index ? 'selected' : ''}" data-if="${p.if_index}" data-name="${esc(p.name)}">
@@ -111,7 +173,24 @@ function renderMonitorOverview(data) {
     });
   });
 
-  renderCpuChart(data.recent_metrics);
+  updateSortIcons();
+}
+
+/** 활성화된 소팅 헤더 상태 아이콘 동적 갱신 */
+function updateSortIcons() {
+  document.querySelectorAll('.ports-table th.sortable').forEach((th) => {
+    const col = th.dataset.sort;
+    const iconEl = th.querySelector('.sort-icon');
+    if (iconEl) {
+      if (currentSortColumn === col) {
+        iconEl.textContent = currentSortOrder === 'asc' ? '▲' : '▼';
+        th.style.color = '#3b82f6'; // 정렬 중인 항목 파란색으로 명시
+      } else {
+        iconEl.textContent = '↕';
+        th.style.color = '';
+      }
+    }
+  });
 }
 
 function renderCpuChart(metrics) {
@@ -256,6 +335,25 @@ function initMonitor() {
   $('#mon-back-btn')?.addEventListener('click', closeDeviceMonitor);
   $('#mon-discover-btn')?.addEventListener('click', monitorDiscover);
   $('#mon-poll-btn')?.addEventListener('click', monitorPollNow);
+
+  // 실시간 문자열 검색 이벤트 바인딩
+  $('#port-search-input')?.addEventListener('input', () => {
+    displayPortsTable();
+  });
+
+  // 각 테이블 컬럼 제목 클릭 시 소팅 정렬 반전 이벤트 위임 바인딩
+  document.querySelectorAll('.ports-table th.sortable').forEach((th) => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.sort;
+      if (currentSortColumn === col) {
+        currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSortColumn = col;
+        currentSortOrder = 'asc';
+      }
+      displayPortsTable();
+    });
+  });
 }
 
 document.addEventListener('DOMContentLoaded', initMonitor);
