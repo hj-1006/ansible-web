@@ -192,9 +192,16 @@
       </section>
 
       <section id="view-monitor" class="view monitor-view">
-        <div class="monitor-toolbar">
+        <div class="monitor-toolbar" style="display: flex; justify-content: space-between; align-items: center;">
           <button class="btn btn-ghost" id="mon-back-btn">← 장비 목록</button>
-          <div class="monitor-actions">
+          <div class="monitor-actions" style="display: flex; align-items: center; gap: 10px;">
+            <select id="monitor-time-select" style="padding: 6px 12px; border: 1px solid #374151; background: #1f2937; color: #fff; border-radius: 6px; font-size: 13px; cursor: pointer; outline: none;">
+              <option value="60">최근 1시간</option>
+              <option value="360">최근 6시간</option>
+              <option value="720">최근 12시간</option>
+              <option value="1440">최근 24시간</option>
+              <option value="today" selected>오늘 하루 (00:00 ~ 현재)</option>
+            </select>
             <button class="btn btn-ghost" id="mon-discover-btn">포트 탐색</button>
             <button class="btn btn-primary" id="mon-poll-btn">지금 수집</button>
           </div>
@@ -213,12 +220,12 @@
         <div class="monitor-grid">
           <div class="panel chart-panel">
             <h4>CPU / Memory</h4>
-            <p class="hint-chart">최근 1시간</p>
+            <p class="hint-chart" id="cpu-chart-hint">오늘 하루</p>
             <div class="chart-wrap"><canvas id="cpu-chart"></canvas></div>
           </div>
           <div class="panel chart-panel wide">
             <h4 id="mon-port-title">포트 트래픽</h4>
-            <p class="hint-chart">포트를 선택하면 실시간 그래프가 표시됩니다</p>
+            <p class="hint-chart" id="traffic-chart-hint">포트를 선택하면 지정한 범위의 실시간 그래프가 표시됩니다</p>
             <div class="chart-wrap tall"><canvas id="traffic-chart"></canvas></div>
           </div>
         </div>
@@ -241,6 +248,24 @@
                 </tr>
               </thead>
               <tbody id="mon-ports-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel panel-flush" style="margin-top: 24px; margin-bottom: 40px;">
+          <div class="panel-toolbar" style="padding: 16px 20px 8px 20px;">
+            <h4 class="section-title" style="margin: 0; padding: 0; border: none;">최근 시스템 메트릭 수집 이력 (device_metric_samples)</h4>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table" style="table-layout: fixed; width: 100%;">
+              <thead>
+                <tr>
+                  <th style="text-align: left; width: 40%; padding-left: 20px;">수집 일시 (Recorded At)</th>
+                  <th style="text-align: right; width: 30%;">CPU 사용률 (CPU Percent)</th>
+                  <th style="text-align: right; width: 30%; padding-right: 20px;">메모리 사용률 (Memory Percent)</th>
+                </tr>
+              </thead>
+              <tbody id="mon-raw-metrics-tbody"></tbody>
             </table>
           </div>
         </div>

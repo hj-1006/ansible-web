@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-import re  # 텍스트 형태의 SNMP 응답(e.g. up(1))에서 숫자만 정밀하게 추출하기 위해 추가
+import re
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -14,6 +14,8 @@ from app.config import settings
 from app.models import Device, DeviceMetricSample, DevicePort, PortTrafficSample
 from app.snmp_client import (
     OID_ASA_CPU,
+    OID_ASA_MEM_FREE,
+    OID_ASA_MEM_USED,
     OID_CISCO_CPU_5MIN,
     OID_CISCO_MEM_FREE,
     OID_CISCO_MEM_USED,
@@ -37,13 +39,11 @@ from app.snmp_client import (
 
 logger = logging.getLogger(__name__)
 
-# 물리 포트 위주 (루프백/터널 등 제외 옵션)
-SKIP_IF_TYPES = {24, 131, 53}  # loopback, tunnel, propVirtual
+SKIP_IF_TYPES = {24, 131, 53}  
 SKIP_NAME_PREFIXES = ("Null", "Vlan", "NVI", "unrouted")
 
 
 def _admin_shutdown(admin: int, oper: int) -> bool:
-    # ifAdminStatus: 2=down → 관리자 셧다운
     return admin == 2
 
 
@@ -70,11 +70,9 @@ def _rows_to_map(rows) -> dict[int, str]:
 
 
 def _rows_to_int_map(rows) -> dict[int, int]:
-    """텍스트가 혼합된 SNMP 반환값(예: up(1), ethernetCsmacd(6))에서 순수 정수만 파싱"""
     out: dict[int, int] = {}
     for r in rows:
         cleaned = r.value.strip()
-        # 1. 괄호 안에 숫자가 매칭되는 형태 처리 (예: up(1) -> 1)
         match = re.search(r"\((\d+)\)", cleaned)
         if match:
             out[r.index] = int(match.group(1))
@@ -82,7 +80,6 @@ def _rows_to_int_map(rows) -> dict[int, int]:
             try:
                 out[r.index] = int(cleaned)
             except ValueError:
-                # 2. 괄호는 없으나 문자열 내부에 숫자가 포함되어 있는 경우 숫자만 필터링 시도
                 digits = re.search(r"\d+", cleaned)
                 if digits:
                     out[r.index] = int(digits.group())
@@ -92,7 +89,6 @@ def _rows_to_int_map(rows) -> dict[int, int]:
 def _counter_delta(prev: int, curr: int) -> int:
     if curr >= prev:
         return curr - prev
-    # 32/64-bit wrap
     return (2**64 - prev + curr) if curr < prev else 0
 
 
@@ -142,7 +138,8 @@ def _fetch_cpu_memory(client: SnmpClient, platform: str) -> tuple[float | None, 
     mem_used: int | None = None
     mem_free: int | None = None
 
-    cpu_oid = OID_ASA_CPU if platform == "asa_5512" else OID_CISCO_CPU_5MIN
+    is_asa = (platform == "asa_5512")
+    cpu_oid = OID_ASA_CPU if is_asa else OID_CISCO_CPU_5MIN
     try:
         cpu_rows = client.walk(cpu_oid)
         vals = []
@@ -156,9 +153,13 @@ def _fetch_cpu_memory(client: SnmpClient, platform: str) -> tuple[float | None, 
     except Exception as exc:
         logger.debug("CPU SNMP %s: %s", client.host, exc)
 
+    # Cisco ASA 고유 메모리 풀 동적 OID 분기 패치 적용
+    mem_used_oid = OID_ASA_MEM_USED if is_asa else OID_CISCO_MEM_USED
+    mem_free_oid = OID_ASA_MEM_FREE if is_asa else OID_CISCO_MEM_FREE
+
     try:
-        used_rows = client.walk(OID_CISCO_MEM_USED)
-        free_rows = client.walk(OID_CISCO_MEM_FREE)
+        used_rows = client.walk(mem_used_oid)
+        free_rows = client.walk(mem_free_oid)
         used_map = _rows_to_int_map(used_rows)
         free_map = _rows_to_int_map(free_rows)
         if used_map and free_map:

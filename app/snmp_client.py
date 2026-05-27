@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from app.config import settings
 from app.models import Device
 
-# 표준 IF-MIB 인터페이스 OID 대역으로 전면 교정
+# 표준 IF-MIB 인터페이스 OID 대역
 OID_IF_DESCR = "1.3.6.1.2.1.2.2.1.2"
 OID_IF_TYPE = "1.3.6.1.2.1.2.2.1.3"
 OID_IF_SPEED = "1.3.6.1.2.1.2.2.1.5"
@@ -29,12 +29,15 @@ OID_SYS_UPTIME = "1.3.6.1.2.1.1.3.0"
 OID_SYS_LOCATION = "1.3.6.1.2.1.1.6.0"
 OID_SYS_CONTACT = "1.3.6.1.2.1.1.4.0"
 
-# Cisco IOS / Catalyst / ISR (구형 포함)
+# Cisco IOS / Catalyst / ISR 규격 OID
 OID_CISCO_CPU_5MIN = "1.3.6.1.4.1.9.9.109.1.1.1.1.5"
 OID_CISCO_MEM_USED = "1.3.6.1.4.1.9.9.48.1.1.1.5"
 OID_CISCO_MEM_FREE = "1.3.6.1.4.1.9.9.48.1.1.1.6"
-# ASA 등
+
+# Cisco ASA 방화벽 전역 모니터링 고유 OID 대역 패치
 OID_ASA_CPU = "1.3.6.1.4.1.9.9.109.1.1.1.1.5"
+OID_ASA_MEM_USED = "1.3.6.1.4.1.9.9.221.1.1.1.1.7"  # cempMemPoolUsed
+OID_ASA_MEM_FREE = "1.3.6.1.4.1.9.9.221.1.1.1.1.8"  # cempMemPoolFree
 
 
 @dataclass

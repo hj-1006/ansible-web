@@ -24,12 +24,30 @@ function portStatusBadge(port) {
   return `<span class="badge ${cls}">${label}</span>`;
 }
 
+/** [신설] 선택된 셀렉터 조건에 맞는 분(Minutes) 수치를 계산하는 동적 필터 처리기 */
+function getSelectedMinutes() {
+  const val = $('#monitor-time-select')?.value || 'today';
+  if (val === 'today') {
+    const now = new Date();
+    // 오늘 자정(00:00:00) 기준 시각 생성
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const diffMinutes = Math.floor((now - midnight) / 60000);
+    // 새벽 시간대 데이터 공백 방지를 위해 최소 60분 볼륨 강제 설정
+    return diffMinutes > 60 ? diffMinutes : 60;
+  }
+  return parseInt(val, 10);
+}
+
 async function openDeviceMonitor(deviceId, deviceName) {
   monitorDeviceId = deviceId;
   selectedIfIndex = null;
   currentSortColumn = 'name';
   currentSortOrder = 'asc';
+  
   if ($('#port-search-input')) $('#port-search-input').value = '';
+  // 화면 진입 시 기본 필터를 '오늘 하루'로 셋업
+  if ($('#monitor-time-select')) $('#monitor-time-select').value = 'today';
+  if ($('#cpu-chart-hint')) $('#cpu-chart-hint').textContent = '오늘 하루';
 
   $('#page-title').textContent = `모니터링 · ${deviceName}`;
   $$('.view').forEach((el) => el.classList.remove('active'));
@@ -47,6 +65,7 @@ async function openDeviceMonitor(deviceId, deviceName) {
 
   await refreshMonitor();
   if (monitorPollTimer) clearInterval(monitorPollTimer);
+  // 10초 주기로 수집 데이터를 새로고침 (주식 변동창과 동일한 실시간 틱 연동)
   monitorPollTimer = setInterval(refreshMonitor, 10000);
 }
 
@@ -62,7 +81,9 @@ function closeDeviceMonitor() {
 async function refreshMonitor() {
   if (!monitorDeviceId) return;
   try {
-    const data = await api(`/api/v1/devices/${monitorDeviceId}/monitor/overview`);
+    const mins = getSelectedMinutes();
+    // 백엔드 개방 엔드포인트에 동적으로 계산된 분량 주입
+    const data = await api(`/api/v1/devices/${monitorDeviceId}/monitor/overview?minutes=${mins}`);
     renderMonitorOverview(data);
     if (selectedIfIndex != null) {
       await loadPortTrafficChart(selectedIfIndex);
@@ -85,16 +106,43 @@ function renderMonitorOverview(data) {
   displayPortsTable();
 
   renderCpuChart(data.recent_metrics);
+  renderRawMetricsTable(data.recent_metrics);
 }
 
-/** Cisco 전용 네트워크 장비 축약어 치환 및 검색 알고리즘 함수 */
+function renderRawMetricsTable(metrics) {
+  const rawTbody = $('#mon-raw-metrics-tbody');
+  if (!rawTbody) return;
+
+  if (!metrics || !metrics.length) {
+    rawTbody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 24px;">수집 완료된 메트릭 이력이 없습니다.</td></tr>';
+    return;
+  }
+
+  const sortedMetrics = [...metrics].reverse();
+
+  rawTbody.innerHTML = sortedMetrics
+    .map((m) => {
+      const timeStr = new Date(m.recorded_at).toLocaleString('ko-KR');
+      const cpuStr = m.cpu_percent != null ? `${m.cpu_percent.toFixed(1)}%` : '—';
+      const memStr = m.memory_percent != null ? `${m.memory_percent.toFixed(1)}%` : '—';
+      
+      return `
+        <tr>
+          <td style="text-align: left; padding-left: 20px; font-variant-numeric: tabular-nums; color: #94a3b8;">${timeStr}</td>
+          <td style="text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; color: #3b82f6;">${cpuStr}</td>
+          <td style="text-align: right; padding-right: 20px; font-variant-numeric: tabular-nums; font-weight: 500; color: #22c55e;">${memStr}</td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
 function matchCiscoPortName(portName, searchVal) {
   const name = portName.toLowerCase().replace(/\s+/g, '');
   const query = searchVal.toLowerCase().replace(/\s+/g, '');
   
   if (name.includes(query)) return true;
   
-  // f0/1, gi1/0/2 등 다양한 스위칭 시스코 인터페이스 명칭 치환 매핑
   let expanded = query;
   if (/^f\d/.test(query)) expanded = query.replace(/^f/, 'fastethernet');
   else if (/^fa\d/.test(query)) expanded = query.replace(/^fa/, 'fastethernet');
@@ -113,7 +161,6 @@ function displayPortsTable() {
 
   const searchVal = $('#port-search-input')?.value.trim() || '';
 
-  // 1. 패치된 네트워크 지능형 검색 결합
   let filtered = currentPortsData.filter((p) => {
     if (!searchVal) return true;
     const matchesName = matchCiscoPortName(p.name, searchVal);
@@ -121,7 +168,6 @@ function displayPortsTable() {
     return matchesName || matchesAlias;
   });
 
-  // 2. 오차 없는 직관적 카테고리별 다중 교차 정렬 메커니즘
   filtered.sort((a, b) => {
     if (currentSortColumn === 'name') {
       const valA = a.name || '';
@@ -164,12 +210,11 @@ function displayPortsTable() {
     return;
   }
 
-  // 3. UI 칸 픽스 맞춤 출력 (스타일 수직 정렬 강제 매칭)
   tbody.innerHTML = filtered
     .map(
       (p) => `
     <tr class="port-row ${selectedIfIndex === p.if_index ? 'selected' : ''}" data-if="${p.if_index}" data-name="${esc(p.name)}">
-      <td style="text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+      <td style="text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 20px;">
         <strong>${esc(p.name)}</strong>
         ${p.alias ? `<br><small style="color: #748094; font-size: 11px; display: block; margin-top: 2px;">${esc(p.alias)}</small>` : ''}
       </td>
@@ -180,7 +225,7 @@ function displayPortsTable() {
       <td class="num" style="text-align: right; font-variant-numeric: tabular-nums;">${formatBps(p.last_in_bps)}</td>
       <td class="num" style="text-align: right; font-variant-numeric: tabular-nums;">${formatBps(p.last_out_bps)}</td>
       <td class="num muted" style="text-align: right; font-variant-numeric: tabular-nums;">${formatBps(p.last_in_avg_bps)}</td>
-      <td class="num muted" style="text-align: right; font-variant-numeric: tabular-nums;">${formatBps(p.last_out_avg_bps)}</td>
+      <td class="num muted" style="text-align: right; font-variant-numeric: tabular-nums; padding-right: 20px;">${formatBps(p.last_out_avg_bps)}</td>
     </tr>`
     )
     .join('');
@@ -257,8 +302,10 @@ function renderCpuChart(metrics) {
 }
 
 async function loadPortTrafficChart(ifIndex) {
+  const mins = getSelectedMinutes();
+  // 트래픽 데이터 또한 실시간 선택한 시간 범위 값 조건과 동기화 연동
   const history = await api(
-    `/api/v1/devices/${monitorDeviceId}/monitor/ports/${ifIndex}/traffic?minutes=60`
+    `/api/v1/devices/${monitorDeviceId}/monitor/ports/${ifIndex}/traffic?minutes=${mins}`
   );
   const ctx = document.getElementById('traffic-chart');
   if (!ctx) return;
@@ -359,6 +406,13 @@ function initMonitor() {
 
   $('#port-search-input')?.addEventListener('input', () => {
     displayPortsTable();
+  });
+
+  // [신설] 시간 조건 필터 값 변경 시 즉각 차트 및 메트릭 재생성 이벤트 핸들러
+  $('#monitor-time-select')?.addEventListener('change', () => {
+    const selectedText = $('#monitor-time-select').options[$('#monitor-time-select').selectedIndex].text;
+    if ($('#cpu-chart-hint')) $('#cpu-chart-hint').textContent = selectedText;
+    refreshMonitor();
   });
 
   document.querySelectorAll('.ports-table th.sortable').forEach((th) => {
