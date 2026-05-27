@@ -24,15 +24,34 @@ function portStatusBadge(port) {
   return `<span class="badge ${cls}">${label}</span>`;
 }
 
-/** [신설] 선택된 셀렉터 조건에 맞는 분(Minutes) 수치를 계산하는 동적 필터 처리기 */
+/** [패치] DB에서 수신된 무타임존 UTC 원본 날짜를 브라우저 로컬 타임존(KST)으로 9시간 자동 보정하는 변환기 */
+function parseUtcDate(dateStr) {
+  if (!dateStr) return new Date();
+  // 문자열 끝에 Z나 타임존 오프셋이 존재하지 않는 경우 강제로 'Z'(UTC 표준시)를 바인딩하여 9시간 시차 유실 원천 방지
+  const cleanStr = dateStr.includes('Z') || dateStr.includes('+') ? dateStr : dateStr.replace(' ', 'T') + 'Z';
+  return new Date(cleanStr);
+}
+
+/** [패치] 주식 변동창 스타일 지능형 가변 차트 레이블 포매터 */
+function formatChartLabel(dateObj, totalMinutes) {
+  if (totalMinutes <= 1440) { 
+    // 24시간 이하 조건일 경우 단순 '시:분:초' 형식 가동
+    return dateObj.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+  // 1주일, 1개월 장기 조회일 경우 구분이 가능하도록 '월-일 시:분' 멀티 세그먼트 형식 자동 전환
+  const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const dd = String(dateObj.getDate()).padStart(2, '0');
+  const hh = String(dateObj.getHours()).padStart(2, '0');
+  const min = String(dateObj.getMinutes()).padStart(2, '0');
+  return `${mm}-${dd} ${hh}:${min}`;
+}
+
 function getSelectedMinutes() {
   const val = $('#monitor-time-select')?.value || 'today';
   if (val === 'today') {
     const now = new Date();
-    // 오늘 자정(00:00:00) 기준 시각 생성
     const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
     const diffMinutes = Math.floor((now - midnight) / 60000);
-    // 새벽 시간대 데이터 공백 방지를 위해 최소 60분 볼륨 강제 설정
     return diffMinutes > 60 ? diffMinutes : 60;
   }
   return parseInt(val, 10);
@@ -45,7 +64,6 @@ async function openDeviceMonitor(deviceId, deviceName) {
   currentSortOrder = 'asc';
   
   if ($('#port-search-input')) $('#port-search-input').value = '';
-  // 화면 진입 시 기본 필터를 '오늘 하루'로 셋업
   if ($('#monitor-time-select')) $('#monitor-time-select').value = 'today';
   if ($('#cpu-chart-hint')) $('#cpu-chart-hint').textContent = '오늘 하루';
 
@@ -65,7 +83,6 @@ async function openDeviceMonitor(deviceId, deviceName) {
 
   await refreshMonitor();
   if (monitorPollTimer) clearInterval(monitorPollTimer);
-  // 10초 주기로 수집 데이터를 새로고침 (주식 변동창과 동일한 실시간 틱 연동)
   monitorPollTimer = setInterval(refreshMonitor, 10000);
 }
 
@@ -82,7 +99,6 @@ async function refreshMonitor() {
   if (!monitorDeviceId) return;
   try {
     const mins = getSelectedMinutes();
-    // 백엔드 개방 엔드포인트에 동적으로 계산된 분량 주입
     const data = await api(`/api/v1/devices/${monitorDeviceId}/monitor/overview?minutes=${mins}`);
     renderMonitorOverview(data);
     if (selectedIfIndex != null) {
@@ -122,7 +138,8 @@ function renderRawMetricsTable(metrics) {
 
   rawTbody.innerHTML = sortedMetrics
     .map((m) => {
-      const timeStr = new Date(m.recorded_at).toLocaleString('ko-KR');
+      // 로깅 테이블 타임스탬프 파싱단 동적 교정 적용
+      const timeStr = parseUtcDate(m.recorded_at).toLocaleString('ko-KR');
       const cpuStr = m.cpu_percent != null ? `${m.cpu_percent.toFixed(1)}%` : '—';
       const memStr = m.memory_percent != null ? `${m.memory_percent.toFixed(1)}%` : '—';
       
@@ -262,9 +279,13 @@ function updateSortIcons() {
 function renderCpuChart(metrics) {
   const ctx = document.getElementById('cpu-chart');
   if (!ctx || typeof Chart === 'undefined') return;
-  const labels = metrics.map((m) => new Date(m.recorded_at).toLocaleTimeString('ko-KR'));
+  
+  // 차트 축 레이블 시차 연동 보정
+  const mins = getSelectedMinutes();
+  const labels = metrics.map((m) => formatChartLabel(parseUtcDate(m.recorded_at), mins));
   const cpu = metrics.map((m) => m.cpu_percent ?? null);
   const mem = metrics.map((m) => m.memory_percent ?? null);
+  
   if (cpuChart) cpuChart.destroy();
   cpuChart = new Chart(ctx, {
     type: 'line',
@@ -303,15 +324,14 @@ function renderCpuChart(metrics) {
 
 async function loadPortTrafficChart(ifIndex) {
   const mins = getSelectedMinutes();
-  // 트래픽 데이터 또한 실시간 선택한 시간 범위 값 조건과 동기화 연동
   const history = await api(
     `/api/v1/devices/${monitorDeviceId}/monitor/ports/${ifIndex}/traffic?minutes=${mins}`
   );
   const ctx = document.getElementById('traffic-chart');
   if (!ctx) return;
-  const labels = history.samples.map((s) =>
-    new Date(s.recorded_at).toLocaleTimeString('ko-KR')
-  );
+  
+  // 포트 트래픽 그래프 레이블 시차 보정
+  const labels = history.samples.map((s) => formatChartLabel(parseUtcDate(s.recorded_at), mins));
   if (trafficChart) trafficChart.destroy();
   trafficChart = new Chart(ctx, {
     type: 'line',
@@ -408,7 +428,6 @@ function initMonitor() {
     displayPortsTable();
   });
 
-  // [신설] 시간 조건 필터 값 변경 시 즉각 차트 및 메트릭 재생성 이벤트 핸들러
   $('#monitor-time-select')?.addEventListener('change', () => {
     const selectedText = $('#monitor-time-select').options[$('#monitor-time-select').selectedIndex].text;
     if ($('#cpu-chart-hint')) $('#cpu-chart-hint').textContent = selectedText;
