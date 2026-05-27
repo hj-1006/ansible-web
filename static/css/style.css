@@ -966,3 +966,54 @@ code {
   .content { padding: 1.25rem; }
   .modal-dialog { max-height: 95vh; }
 }
+/* ==========================================================================
+   주식 트레이딩 뷰 스타일 고정밀 줌 모달 (Zoom & Pan Interactive Layer)
+   ========================================================================== */
+
+/* 줌 모달 백드롭을 일반 모달보다 훨씬 딥하고 어둡게 처리하여 차트 몰입도를 극대화합니다 */
+#zoom-chart-modal .modal-backdrop {
+  background-color: rgba(8, 10, 15, 0.95) !important;
+  backdrop-filter: blur(6px);
+}
+
+/* 대형 분석 창 내부의 격자 테두리와 타이틀 레이아웃을 고급스럽게 튜닝합니다 */
+#zoom-chart-modal .modal-dialog {
+  border: 1px solid #2d3748 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8) !important;
+  animation: zoomModalFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 축 초기화 버튼 호버 시 화려한 하이라이트 효과 */
+#zoom-reset-axis-btn {
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+#zoom-reset-axis-btn:hover {
+  background-color: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+}
+
+/* 우측 상단 닫기 엑스 버튼 호버 액션 */
+#zoom-modal-close-x {
+  transition: color 0.15s ease;
+}
+
+#zoom-modal-close-x:hover {
+  color: #ef4444 !important;
+}
+
+/* 금융 플랫폼 특유의 부드러운 팝업 애니메이션 */
+@keyframes zoomModalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}

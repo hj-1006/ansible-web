@@ -3,12 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ansible Network Control</title>
+  <title>Aion Network Operations Console</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
 </head>
 <body>
   <div id="auth-overlay" class="overlay">
@@ -33,7 +34,7 @@
       <div class="brand">
         <span class="logo-mark sm"></span>
         <div>
-          <span class="brand-name">Ansible Web</span>
+          <span class="brand-name">Aion Web</span>
           <span class="brand-sub">Network Ops</span>
         </div>
       </div>
@@ -219,14 +220,14 @@
           </div>
         </div>
         <div class="monitor-grid">
-          <div class="panel chart-panel">
+          <div class="panel chart-panel" style="cursor: pointer;">
             <h4>CPU / Memory</h4>
-            <p class="hint-chart" id="cpu-chart-hint">오늘 하루</p>
+            <p class="hint-chart" id="cpu-chart-hint">오늘 하루 (클릭 시 세부 격자 분석 패널 확장)</p>
             <div class="chart-wrap"><canvas id="cpu-chart"></canvas></div>
           </div>
-          <div class="panel chart-panel wide">
+          <div class="panel chart-panel wide" style="cursor: pointer;">
             <h4 id="mon-port-title">포트 트래픽</h4>
-            <p class="hint-chart" id="traffic-chart-hint">포트를 선택하면 지정한 범위의 실시간 그래프가 표시됩니다</p>
+            <p class="hint-chart" id="traffic-chart-hint">포트를 선택하면 지정한 범위의 실시간 그래프가 표시됩니다 (클릭 시 세부 패널 확장)</p>
             <div class="chart-wrap tall"><canvas id="traffic-chart"></canvas></div>
           </div>
         </div>
@@ -284,6 +285,33 @@
     </main>
   </div>
 
+  <div id="zoom-chart-modal" class="modal hidden" style="z-index: 2000;">
+    <div class="modal-backdrop" style="background: rgba(15, 23, 42, 0.9);" id="zoom-modal-backdrop"></div>
+    <div class="modal-dialog" style="max-width: 94vw; width: 94vw; height: 88vh; max-height: 88vh; display: flex; flex-direction: column; background: #1e293b; border: 1px solid #475569;">
+      <header class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 24px; border-bottom: 1px solid #334155; background: #0f172a;">
+        <div>
+          <h3 id="zoom-modal-title" style="font-size: 16px; font-weight: 600; color: #f8fafc; letter-spacing: -0.5px;">Aion 인프라 정밀 분석 콘솔</h3>
+        </div>
+        
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div class="btn-group" style="display: flex; background: #1e293b; padding: 2px; border-radius: 6px; border: 1px solid #475569;">
+            <button type="button" class="btn btn-sm" id="btn-nav-left" style="padding: 4px 10px; font-size: 12px; background: none; border: none; color: #94a3b8;" title="과거 시간대로 축 이동">◀ 이동</button>
+            <button type="button" class="btn btn-sm" id="btn-nav-zoom-in" style="padding: 4px 10px; font-size: 12px; background: none; border: none; color: #f1f5f9; font-weight: 600;" title="시간 범위 좁히기 (확대)">🔍+ 확대</button>
+            <button type="button" class="btn btn-sm" id="btn-nav-zoom-out" style="padding: 4px 10px; font-size: 12px; background: none; border: none; color: #f1f5f9; font-weight: 600;" title="시간 범위 넓히기 (축소)">🔍- 축소</button>
+            <button type="button" class="btn btn-sm" id="btn-nav-right" style="padding: 4px 10px; font-size: 12px; background: none; border: none; color: #94a3b8;" title="현재 시간대로 축 이동">이동 ▶</button>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" id="zoom-reset-axis-btn" style="border: 1px solid #475569; color: #f1f5f9; padding: 5px 12px; font-size: 12px; border-radius: 6px;">범위 리셋</button>
+          <button type="button" id="zoom-modal-close-x" style="background: none; border: none; color: #94a3b8; font-size: 26px; cursor: pointer; padding-left: 10px;">&times;</button>
+        </div>
+      </header>
+      <div class="modal-body" style="flex: 1; min-height: 0; padding: 20px; position: relative; background: #0f172a;">
+        <div style="width: 100%; height: 100%; position: relative;">
+          <canvas id="expanded-interactive-canvas"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="modal" class="modal hidden">
     <div class="modal-backdrop" data-close="modal"></div>
     <div class="modal-dialog">
@@ -296,7 +324,6 @@
       </header>
       <form id="device-form" class="modal-body">
         <input type="hidden" id="device-id">
-
         <section class="form-section">
           <h4 class="form-section-title">기본 정보</h4>
           <div class="form-grid">
@@ -415,39 +442,7 @@
     </div>
   </div>
 
-  <div id="job-modal" class="modal hidden">
-    <div class="modal-backdrop" data-close="job-modal"></div>
-    <div class="modal-dialog modal-lg">
-      <header class="modal-header">
-        <h3>작업 결과</h3>
-        <button type="button" class="btn-icon" id="job-modal-close" aria-label="닫기">×</button>
-      </header>
-      <pre id="job-detail" class="log-area modal-log"></pre>
-    </div>
-  </div>
-
-  <div id="command-modal" class="modal hidden">
-    <div class="modal-backdrop" data-close="command-modal"></div>
-    <div class="modal-dialog modal-sm">
-      <header class="modal-header">
-        <h3>명령 실행</h3>
-        <button type="button" class="btn-icon" id="cmd-cancel-x" aria-label="닫기">×</button>
-      </header>
-      <div class="modal-body">
-        <input type="hidden" id="cmd-device-id">
-        <div class="field">
-          <label for="cmd-input">CLI 명령</label>
-          <input id="cmd-input" placeholder="show ip interface brief">
-        </div>
-      </div>
-      <footer class="modal-footer">
-        <button type="button" class="btn btn-ghost" id="cmd-cancel">취소</button>
-        <button type="button" class="btn btn-primary" id="cmd-run">실행</button>
-      </footer>
-    </div>
-  </div>
-
   <script src="/static/js/app.js"></script>
-  <script src="/static/js/monitor.js"></script>
+  <script src="/static/js/monitor.js?v=20260527_v4"></script>
 </body>
 </html>
